@@ -60,13 +60,19 @@ def validate_command_syntax(data: ValidationInput) -> tuple[list[str], tuple[str
 
 def validate_network_state(data: ValidationInput, command: tuple[str, str]) -> list[str]:
     action, _ = command
-    state = data.interface_state or INTERFACE_STATES.get((data.device_id, data.target_interface))
+    state = (
+        data.interface_state
+        if data.interface_state is not None
+        else INTERFACE_STATES.get((data.device_id, data.target_interface))
+    )
     config = data.current_config or {}
     errors = []
     if state not in {"up", "down", "admin_down"}:
         return ["Unknown interface state; provide up, down, or admin_down"]
     if action == "no shutdown" and state == "up":
         errors.append("Interface is already up; no shutdown is unnecessary")
+    elif action == "no shutdown" and state != "admin_down":
+        errors.append("no shutdown is only safe when the interface is administratively down")
     elif action == "shutdown" and state == "admin_down":
         errors.append("Interface is already administratively down")
     elif action == "shutdown" and state == "down":
