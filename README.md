@@ -86,13 +86,38 @@ python -m pytest -q
 The tests cover parsing, the strict diagnosis schema, topology and validation
 boundaries, accepted/rejected fault-fix pairs, and the end-to-end demo.
 
-## Evaluation metrics
+## Evaluation methodology
 
-The evaluation reports diagnosis correctness, valid-fix acceptance rate,
-invalid-fix rejection rate, false-acceptance rate, false-rejection rate,
-overall validation accuracy, accepted/rejected totals, and per-fault results.
-All percentages are calculated from executed cases; no presentation values are
-hardcoded.
+Run the reproducible offline evaluation with:
+
+```powershell
+py evaluation.py
+```
+
+The output contains two deliberately separate benchmarks:
+
+1. **Packet Tracer demonstration**: the existing fixture-backed demo presents
+   the Router0 administrative-down scenario and a rejected incorrect fix. It
+   is not an LLM accuracy experiment.
+2. **Deterministic offline validation benchmark**: 500 synthetic cases with
+   exactly 100 valid fixes and 100 each of wrong-command, malformed,
+   wrong-target, and wrong-device cases. It reports valid-fix acceptance,
+   invalid-fix rejection, false acceptance, false rejection, classification
+   accuracy, and fault-type breakdown. This measures the validator's
+   classification behavior, not LLM diagnosis accuracy.
+3. **Deterministic/mock diagnosis benchmark**: 30 structured evidence events
+   covering `interface_down`, `ospf_neighbor_down`, and `incorrect_ip` are
+   passed through the existing `diagnose_event` interface using an injected
+   deterministic mock client. Predictions are compared directly with
+   ground-truth fault types, including a confusion matrix. No external LLM
+   API calls are made.
+
+The benchmark writes `evaluation.json` and the validation-compatible
+`evaluation.csv`, plus separate `diagnosis.json` and `diagnosis.csv` files.
+`summary.json` contains both metric groups. All percentages are calculated
+from executed cases; no presentation values are hardcoded. A future real-LLM
+evaluation would require a separately designed experiment and explicit API
+cost, sampling, and reproducibility controls.
 
 ## Limitations and future scope
 
