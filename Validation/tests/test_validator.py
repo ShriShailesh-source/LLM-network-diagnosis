@@ -127,3 +127,25 @@ def test_ip_command_requires_a_changed_address():
     ))
     assert result["valid"] is False
     assert any("already has" in error for error in result["errors"])
+
+
+def test_ospf_neighbor_fix_is_checked_against_interface_state():
+    result = validate(diagnosis(
+        detected_fault="ospf_neighbor_down",
+        candidate_command="no shutdown",
+        interface_state="admin_down",
+    ))
+    assert result["valid"] is True
+
+
+def test_incorrect_ip_fix_must_match_expected_network_state():
+    result = validate(diagnosis(
+        detected_fault="incorrect_ip",
+        candidate_command="ip address 10.0.99.1 255.255.255.0",
+        interface_state="up",
+        current_config={
+            "ip_address": "10.0.12.1 255.255.255.0",
+            "expected_ip_address": "10.0.99.1 255.255.255.0",
+        },
+    ))
+    assert result["valid"] is True

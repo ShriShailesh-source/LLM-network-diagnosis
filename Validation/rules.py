@@ -1,5 +1,6 @@
 """Validation rules for candidate network configuration commands."""
 import ipaddress
+import math
 import re
 
 from .models import ValidationInput
@@ -13,7 +14,8 @@ def validate_required_fields(data: ValidationInput) -> list[str]:
         if not isinstance(value, str) or not value.strip():
             errors.append(f"Missing or invalid {name}")
     score = data.confidence_score
-    if isinstance(score, bool) or not isinstance(score, (int, float)) or not 0.0 <= score <= 1.0:
+    if (isinstance(score, bool) or not isinstance(score, (int, float))
+            or not math.isfinite(score) or not 0.0 <= score <= 1.0):
         errors.append("confidence_score must be a finite number between 0 and 1")
     return errors
 
@@ -81,6 +83,9 @@ def validate_network_state(data: ValidationInput, command: tuple[str, str]) -> l
         errors.append("Interface has no configured IP address to remove")
     elif action == "ip address" and config.get("ip_address") == command[1]:
         errors.append("Interface already has the proposed IP address")
+    elif action == "ip address" and config.get("expected_ip_address"):
+        if config["expected_ip_address"] != command[1]:
+            errors.append("Proposed IP address does not match the expected network state")
     elif action == "duplex" and config.get("duplex") == command[1]:
         errors.append("Interface already uses the proposed duplex setting")
     elif action == "speed" and config.get("speed") == command[1]:
@@ -91,8 +96,11 @@ def validate_network_state(data: ValidationInput, command: tuple[str, str]) -> l
 FAULT_COMMANDS = {
     "interface_down": {"no shutdown"},
     "administratively_down": {"no shutdown"},
+    "ospf_neighbor_down": {"no shutdown"},
+    "neighbor_down": {"no shutdown"},
     "missing_ip_address": {"ip address"},
     "incorrect_ip_address": {"ip address"},
+    "incorrect_ip": {"ip address"},
     "ip_misconfiguration": {"ip address", "no ip address"},
     "duplex_mismatch": {"duplex"},
     "speed_mismatch": {"speed"},

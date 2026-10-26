@@ -41,6 +41,15 @@ Oct 23 17:01:03 router1 %OSPF-5-ADJCHG: Process 1, Nbr 10.0.0.2 on GigabitEthern
     def test_empty_input_returns_no_events(self) -> None:
         self.assertEqual(parse_logs(" \n"), [])
 
+    def test_ospf_event_exposes_structured_protocol_fields(self) -> None:
+        event = parse_logs(
+            "R2 %OSPF-5-ADJCHG: Process 1, Nbr 10.0.23.2 on "
+            "GigabitEthernet0/1 from FULL to DOWN, Neighbor Down: Dead timer expired"
+        )[0]
+        self.assertEqual(event.fault_type, "ospf_neighbor_down")
+        self.assertEqual(event.protocol, "ospf")
+        self.assertEqual(event.neighbor_id, "10.0.23.2")
+
 
 if __name__ == "__main__":
     unittest.main()

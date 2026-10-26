@@ -1,0 +1,4 @@
+# Simulated fixture evidence; not collected from a live network.
+R2 %OSPF-5-ADJCHG: Process 1, Nbr 10.0.23.2 on GigabitEthernet0/1 from FULL to DOWN, Neighbor Down: Dead timer expired
+R3 %LINK-3-UPDOWN: Interface GigabitEthernet0/0, changed state to down
+GigabitEthernet0/0 10.0.99.1 YES manual up up

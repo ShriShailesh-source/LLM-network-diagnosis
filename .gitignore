@@ -6,3 +6,6 @@ __pycache__/
 !.env.example
 .test-deps/
 .pip-tmp/
+.pytest_cache/
+__pycache__/
+evaluation_results/

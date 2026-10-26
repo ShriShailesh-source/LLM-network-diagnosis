@@ -1,4 +1,4 @@
-"""Parse Cisco interface-down logs and show ip interface brief output."""
+"""Normalize Cisco-style fixture evidence into structured network events."""
 
 from __future__ import annotations
 
@@ -42,6 +42,10 @@ class ParsedLogEvent:
     detected_fault: str
     raw_message: str
     interface_state: str | None = None
+    fault_type: str = "interface_down"
+    protocol: str | None = None
+    neighbor_id: str | None = None
+    ip_address: str | None = None
 
 
 def parse_logs(raw_logs: str, device_id: str | None = None) -> list[ParsedLogEvent]:
@@ -71,6 +75,10 @@ def parse_logs(raw_logs: str, device_id: str | None = None) -> list[ParsedLogEve
         brief_match = _INTERFACE_BRIEF.match(message)
         interface_state = None
 
+        fault_type = "interface_down"
+        protocol = None
+        neighbor_id = None
+        ip_address = None
         if neighbor_match:
             neighbor = neighbor_match.group("neighbor")
             reason = neighbor_match.group("reason")
@@ -78,6 +86,9 @@ def parse_logs(raw_logs: str, device_id: str | None = None) -> list[ParsedLogEve
             if reason:
                 fault += f" (reason: {reason.strip()})"
             interface = neighbor_match.group("interface")
+            fault_type = "ospf_neighbor_down"
+            protocol = "ospf"
+            neighbor_id = neighbor
         elif interface_match:
             interface = interface_match.group("interface")
             fault = f"Interface {interface} is down"
@@ -92,6 +103,7 @@ def parse_logs(raw_logs: str, device_id: str | None = None) -> list[ParsedLogEve
                 if status == 'administratively down'
                 else 'down'
             )
+            ip_address = message.split()[1] if len(message.split()) > 1 else None
         else:
             continue
 
@@ -104,6 +116,10 @@ def parse_logs(raw_logs: str, device_id: str | None = None) -> list[ParsedLogEve
                 detected_fault=fault,
                 raw_message=message,
                 interface_state=interface_state,
+                fault_type=fault_type,
+                protocol=protocol,
+                neighbor_id=neighbor_id,
+                ip_address=ip_address,
             )
         )
 
