@@ -7,6 +7,9 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from collections.abc import Awaitable, Callable
 from urllib.parse import urlparse
 
+from ai_engine import DiagnosisResult
+from log_preprocessor import ParsedLogEvent
+from Validation.decision import evaluate_decision
 from Validation.validator import validate_payload
 
 
@@ -58,11 +61,7 @@ async def app(
                 break
         try:
             payload = json.loads(bytes(body))
-            result = validate_payload(
-                payload,
-                interface_state=payload.get("interface_state"),
-                current_config=payload.get("current_config"),
-            )
+            result = _decision_response(payload)
         except (ValueError, TypeError, json.JSONDecodeError) as exc:
             await _asgi_json(
                 send,
@@ -100,6 +99,56 @@ async def _asgi_response(
     await send({"type": "http.response.body", "body": body})
 
 
+def _decision_response(payload: dict) -> dict:
+    """Return evidence-gated decision details when structured evidence is supplied."""
+    evidence_payload = payload.get("evidence")
+    if not isinstance(evidence_payload, dict):
+        return validate_payload(
+            payload,
+            interface_state=payload.get("interface_state"),
+            current_config=payload.get("current_config"),
+        )
+    diagnosis = DiagnosisResult.model_validate({
+        key: payload[key]
+        for key in (
+            "event_id", "device_id", "target_interface", "detected_fault",
+            "candidate_command", "confidence_score",
+        )
+        if key in payload
+    })
+    evidence = ParsedLogEvent(
+        event_id=str(evidence_payload.get("event_id", "evidence")),
+        device_id=evidence_payload.get("device_id"),
+        timestamp=evidence_payload.get("timestamp"),
+        target_interface=str(evidence_payload.get("target_interface", "")),
+        detected_fault=str(evidence_payload.get("detected_fault", "")),
+        raw_message=str(evidence_payload.get("raw_message", "")),
+        interface_state=evidence_payload.get("interface_state"),
+        fault_type=str(evidence_payload.get("fault_type", "interface_down")),
+        protocol=evidence_payload.get("protocol"),
+        neighbor_id=evidence_payload.get("neighbor_id"),
+    )
+    result = evaluate_decision(
+        diagnosis,
+        evidence,
+        observed_state=payload.get("observed_state"),
+        current_config=payload.get("current_config"),
+    )
+    return {
+        "diagnosis": diagnosis.model_dump(),
+        "evidence_supported": result.evidence.supported,
+        "evidence_score": result.evidence.evidence_score,
+        "evidence_reasons": result.evidence.reasons,
+        "risk_level": result.risk.risk_level,
+        "blast_radius": result.risk.blast_radius,
+        "reversible": result.risk.reversible,
+        "validation_result": result.validation_result,
+        "expected_state": result.expected_state.__dict__,
+        "final_decision": result.final_decision,
+        "reason": result.reason,
+    }
+
+
 class DashboardHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         if urlparse(self.path).path == "/health":
@@ -117,11 +166,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
         try:
             length = int(self.headers.get("Content-Length", "0"))
             payload = json.loads(self.rfile.read(length))
-            result = validate_payload(
-                payload,
-                interface_state=payload.get("interface_state"),
-                current_config=payload.get("current_config"),
-            )
+            result = _decision_response(payload)
         except (ValueError, TypeError, json.JSONDecodeError) as exc:
             self._json({"valid": False, "errors": [f"Invalid JSON request: {exc}"]}, 400)
             return

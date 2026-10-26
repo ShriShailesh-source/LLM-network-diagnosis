@@ -10,8 +10,11 @@ network state model.
 Cisco-style evidence / fixture
         -> log_preprocessor.py
 Structured event -> ai_engine.py (Gemini or injected deterministic client)
+        -> Validation/evidence.py (independent consistency gate)
+        -> Validation/risk.py
         -> Validation/validator.py
-        -> ACCEPTED safe recommendation or REJECTED explanation
+        -> Validation/expected_state.py
+        -> ACCEPT / REJECT / NO_ACTION / ESCALATE
         -> evaluation.py metrics
 ```
 
@@ -30,12 +33,25 @@ The validator never executes commands. It only recommends or rejects them.
 - `Validation/rules.py` checks required fields and confidence, device and
   interface existence, supported command syntax, IP validity, current state,
   and fault/fix correspondence.
+- `Validation/evidence.py` independently compares device, interface, state, and
+  fault type against parsed evidence. It can identify a likely wrong device
+  when evidence from multiple devices is supplied.
+- `Validation/risk.py` classifies candidate commands as LOW, MEDIUM, HIGH,
+  CRITICAL, or UNKNOWN using a deterministic policy.
+- `Validation/expected_state.py` predicts supported state transitions and
+  verifies an observed post-fix state without executing commands.
+- `Validation/decision.py` applies the ordered evidence, risk, validation, and
+  expected-state policy. Unsupported diagnoses produce `NO_ACTION`; unsafe
+  candidates are `REJECT`; mismatched post-fix observations produce
+  `ESCALATE`; matching observations produce `REMEDIATION_VERIFIED`.
 - `demo.py` runs the Packet Tracer evidence through both an accepted and a
   deliberately rejected recommendation.
 - `evaluation.py` generates and executes deterministic cases and exports
   `evaluation.json`, `evaluation.csv`, and `summary.json`.
 - `dashboard.py` is a small standard-library HTTP dashboard/API. It validates
-  submitted diagnoses but does not execute them.
+  submitted diagnoses and, when structured `evidence` is included, exposes the
+  evidence score, risk, validation, expected state, and final decision. It
+  never executes commands.
 
 ## Evidence and Packet Tracer
 

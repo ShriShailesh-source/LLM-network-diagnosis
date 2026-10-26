@@ -24,6 +24,10 @@ administratively shut down; do not recommend "no shutdown" unless the logs
 explicitly establish that condition. Do not propose reloads, configuration
 erasure, credential changes, broad ACL changes, or commands unrelated to
 the reported fault.
+The independent Python evidence-consistency and risk layers are authoritative.
+If the supplied evidence contradicts the suspected fault, candidate_command
+must be empty and confidence_score must be 0.0. Do not treat a model-provided
+evidence flag as proof; only structured evidence can establish support.
 
 Return only the required structured fields. Copy event_id, device_id, and
 target_interface exactly from the input. candidate_command must be one
