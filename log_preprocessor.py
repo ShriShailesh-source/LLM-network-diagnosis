@@ -1,4 +1,4 @@
-"""Parse common Cisco-style interface and OSPF down log messages."""
+"""Parse Cisco interface-down logs and show ip interface brief output."""
 
 from __future__ import annotations
 
@@ -24,6 +24,11 @@ _OSPF_NEIGHBOR_DOWN = re.compile(
     r"(?:,\s*Neighbor Down:\s*(?P<reason>[^,]+))?",
     re.IGNORECASE,
 )
+_INTERFACE_BRIEF = re.compile(
+    r"^(?P<interface>[\w./:-]+)\s+\S+\s+(?:YES|NO)\s+\S+\s+"
+    r"(?P<status>administratively down|down|up)\s+(?:down|up)\s*$",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
@@ -36,6 +41,7 @@ class ParsedLogEvent:
     target_interface: str
     detected_fault: str
     raw_message: str
+    interface_state: str | None = None
 
 
 def parse_logs(raw_logs: str, device_id: str | None = None) -> list[ParsedLogEvent]:
@@ -62,6 +68,8 @@ def parse_logs(raw_logs: str, device_id: str | None = None) -> list[ParsedLogEve
 
         neighbor_match = _OSPF_NEIGHBOR_DOWN.search(message)
         interface_match = _INTERFACE_DOWN.search(message)
+        brief_match = _INTERFACE_BRIEF.match(message)
+        interface_state = None
 
         if neighbor_match:
             neighbor = neighbor_match.group("neighbor")
@@ -73,6 +81,17 @@ def parse_logs(raw_logs: str, device_id: str | None = None) -> list[ParsedLogEve
         elif interface_match:
             interface = interface_match.group("interface")
             fault = f"Interface {interface} is down"
+        elif brief_match:
+            status = brief_match.group("status").lower()
+            if status == "up":
+                continue
+            interface = brief_match.group("interface")
+            fault = f"Interface {interface} is down"
+            interface_state = (
+                'admin_down'
+                if status == 'administratively down'
+                else 'down'
+            )
         else:
             continue
 
@@ -84,6 +103,7 @@ def parse_logs(raw_logs: str, device_id: str | None = None) -> list[ParsedLogEve
                 target_interface=interface,
                 detected_fault=fault,
                 raw_message=message,
+                interface_state=interface_state,
             )
         )
 

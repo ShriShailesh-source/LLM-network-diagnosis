@@ -1,8 +1,9 @@
-"""Run a deterministic network-log → diagnosis → validation demonstration."""
+"""Run a deterministic Packet Tracer evidence → diagnosis → validation demo."""
 from __future__ import annotations
 
 import sys
 from dataclasses import replace
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, TextIO
 
@@ -11,9 +12,9 @@ from log_preprocessor import parse_logs
 from Validation.validator import validate_payload
 
 
-SAMPLE_LOG = "%LINK-3-UPDOWN: Interface GigabitEthernet0/1 is down"
+PACKET_TRACER_FIXTURE = Path(__file__).parent / "logs" / "packet_tracer_router0.txt"
+# Router0 in the Packet Tracer transcript maps to the existing R1 inventory.
 SIMULATED_DEVICE = "R1"
-SIMULATED_INTERFACE_STATE = "admin_down"
 
 
 class _DeterministicClient:
@@ -35,10 +36,17 @@ def _run_scenario(
     candidate_command: str,
     confidence_score: float,
 ) -> dict[str, Any]:
-    events = parse_logs(SAMPLE_LOG, device_id=SIMULATED_DEVICE)
-    if not events:
-        raise RuntimeError("The sample network log produced no parsed event")
-    event = replace(events[0], event_id=event_id)
+    raw_evidence = PACKET_TRACER_FIXTURE.read_text(encoding="utf-8-sig")
+    events = parse_logs(raw_evidence, device_id=SIMULATED_DEVICE)
+    event = next(
+        (item for item in events if item.target_interface == "GigabitEthernet0/1"),
+        None,
+    )
+    if event is None:
+        raise RuntimeError("Packet Tracer fixture has no G0/1 down event")
+    if event.interface_state is None:
+        raise RuntimeError("Packet Tracer fixture has no G0/1 state evidence")
+    event = replace(event, event_id=event_id)
     proposed_diagnosis = DiagnosisResult(
         event_id=event.event_id,
         device_id=event.device_id or "",
@@ -49,14 +57,11 @@ def _run_scenario(
     )
 
     diagnosis = diagnose_event(event, client=_DeterministicClient(proposed_diagnosis))
-    validation = validate_payload(
-        diagnosis,
-        interface_state=SIMULATED_INTERFACE_STATE,
-    )
+    validation = validate_payload(diagnosis, interface_state=event.interface_state)
     return {
         "event": event,
         "diagnosis": diagnosis,
-        "interface_state": SIMULATED_INTERFACE_STATE,
+        "interface_state": event.interface_state,
         "validation": validation,
     }
 
@@ -95,7 +100,7 @@ def run_demo(output: TextIO | None = None) -> list[dict[str, Any]]:
         print(f"Detected fault: {diagnosis.detected_fault}", file=output)
         print(f"Candidate command: {diagnosis.candidate_command}", file=output)
         print(f"Confidence: {diagnosis.confidence_score:.2f}", file=output)
-        print("Simulated state: " + result["interface_state"], file=output)
+        print("Packet Tracer state: " + result["interface_state"], file=output)
 
         if validation["valid"]:
             print("\nValidation: ACCEPTED", file=output)
