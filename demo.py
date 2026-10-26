@@ -1,4 +1,4 @@
-"""Run a deterministic Packet Tracer evidence → diagnosis → validation demo."""
+"""Present the Packet Tracer evidence through diagnosis and validation."""
 from __future__ import annotations
 
 import sys
@@ -15,10 +15,26 @@ from Validation.validator import validate_payload
 PACKET_TRACER_FIXTURE = Path(__file__).parent / "logs" / "packet_tracer_router0.txt"
 # Router0 in the Packet Tracer transcript maps to the existing R1 inventory.
 SIMULATED_DEVICE = "R1"
+VALIDATION_CHECKS = (
+    "Required diagnosis fields and confidence",
+    "Device and interface existence",
+    "Command syntax and supported command",
+    "Current network-state safety",
+    "Fault-to-fix correspondence",
+)
+RECOVERY_RESULT = {
+    "interface_status": "up/up",
+    "pings": (
+        "192.168.1.1",
+        "10.0.0.2",
+        "192.168.2.1",
+        "192.168.2.10",
+    ),
+}
 
 
 class _DeterministicClient:
-    """Provide fixed structured diagnoses through ai_engine's client seam."""
+    """Supply a fixed structured result through ai_engine's client seam."""
 
     def __init__(self, result: DiagnosisResult) -> None:
         self.models = SimpleNamespace(
@@ -66,8 +82,56 @@ def _run_scenario(
     }
 
 
+def _print_scenario(result: dict[str, Any], *, output: TextIO, valid_case: bool) -> None:
+    event = result["event"]
+    diagnosis = result["diagnosis"]
+    validation = result["validation"]
+    label = "Valid diagnosis" if valid_case else "Invalid diagnosis"
+
+    print(f"\n--- {label} ---", file=output)
+    print("1. Packet Tracer evidence", file=output)
+    print("   Router0#show ip interface brief", file=output)
+    print(f"   {event.raw_message}", file=output)
+
+    print("2. Parsed network event", file=output)
+    print(f"   Event ID: {event.event_id}", file=output)
+    print(f"   Device: {event.device_id} (Packet Tracer Router0)", file=output)
+    print(f"   Interface: {event.target_interface}", file=output)
+    print(f"   Parsed fault: {event.detected_fault}", file=output)
+    print(f"   Observed interface state: {event.interface_state}", file=output)
+
+    print("3. LLM diagnosis", file=output)
+    print("   Diagnosis interface: ai_engine.diagnose_event", file=output)
+    print("   Client: deterministic injected test/demo client (no API call)", file=output)
+    print(f"   Detected fault: {diagnosis.detected_fault}", file=output)
+    print(f"   Confidence: {diagnosis.confidence_score:.2f}", file=output)
+
+    print("4. Candidate fix", file=output)
+    print(f"   {diagnosis.candidate_command}", file=output)
+
+    print("5. Validation checks", file=output)
+    for check in VALIDATION_CHECKS:
+        print(f"   - {check}", file=output)
+
+    if validation["valid"]:
+        print("6. Validation result: ACCEPTED", file=output)
+        print("7. Recovery verification", file=output)
+        print("   Packet Tracer follow-up reported by user:", file=output)
+        print(f"   Router0 GigabitEthernet0/1: {RECOVERY_RESULT['interface_status']}", file=output)
+        print("   PC0 ping successful to:", file=output)
+        for address in RECOVERY_RESULT["pings"]:
+            print(f"   - {address}", file=output)
+    else:
+        print("6. Validation result: REJECTED", file=output)
+        print("   Validation errors:", file=output)
+        for error in validation["errors"]:
+            print(f"   - {error}", file=output)
+        print("7. Recovery verification", file=output)
+        print("   Not attempted: validation rejected the candidate command.", file=output)
+
+
 def run_demo(output: TextIO | None = None) -> list[dict[str, Any]]:
-    """Print the two demo scenarios and return their real pipeline results."""
+    """Print accepted and rejected pipeline scenarios and return their results."""
     if output is None:
         output = sys.stdout
 
@@ -88,29 +152,10 @@ def run_demo(output: TextIO | None = None) -> list[dict[str, Any]]:
 
     print("=== NETWORK TROUBLESHOOTING DEMO ===", file=output)
     results = []
-    for number, scenario in enumerate(scenarios, start=1):
+    for index, scenario in enumerate(scenarios):
         result = _run_scenario(**scenario)
-        diagnosis = result["diagnosis"]
-        validation = result["validation"]
-        label = "Valid diagnosis" if number == 1 else "Invalid diagnosis"
-        print(f"\n--- Scenario {number}: {label} ---", file=output)
-        print(f"Event: {diagnosis.event_id}", file=output)
-        print(f"Device: {diagnosis.device_id}", file=output)
-        print(f"Interface: {diagnosis.target_interface}", file=output)
-        print(f"Detected fault: {diagnosis.detected_fault}", file=output)
-        print(f"Candidate command: {diagnosis.candidate_command}", file=output)
-        print(f"Confidence: {diagnosis.confidence_score:.2f}", file=output)
-        print("Packet Tracer state: " + result["interface_state"], file=output)
-
-        if validation["valid"]:
-            print("\nValidation: ACCEPTED", file=output)
-        else:
-            print("\nValidation: REJECTED", file=output)
-            print("\nReason:", file=output)
-            for error in validation["errors"]:
-                print(f"- {error}", file=output)
+        _print_scenario(result, output=output, valid_case=index == 0)
         results.append(result)
-
     return results
 
 
