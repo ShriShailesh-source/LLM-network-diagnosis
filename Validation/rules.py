@@ -108,8 +108,20 @@ FAULT_COMMANDS = {
 }
 
 
+def normalize_fault_label(fault: str) -> str:
+    """Map free-form LLM fault descriptions to the validator's canonical labels."""
+    normalized = "_".join(fault.strip().lower().replace("-", " ").split())
+    if "administratively_down" in normalized or "administratively_down" == normalized:
+        return "administratively_down"
+    if re.fullmatch(r"interface(?:_\w+)*_is_down", normalized):
+        return "interface_down"
+    if normalized.startswith("interface_") and normalized.endswith("_down"):
+        return "interface_down"
+    return normalized
+
+
 def validate_fault_fix(data: ValidationInput, command: tuple[str, str]) -> list[str]:
-    fault = "_".join(data.detected_fault.strip().lower().replace("-", " ").split())
+    fault = normalize_fault_label(data.detected_fault)
     allowed = FAULT_COMMANDS.get(fault)
     if not allowed or command[0] not in allowed:
         return [f"Command '{data.candidate_command}' does not address detected fault '{data.detected_fault}'"]
