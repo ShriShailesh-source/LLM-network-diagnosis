@@ -66,11 +66,12 @@ Use the repository's Python environment:
 python demo.py
 python -m evaluation --count 10
 python -m evaluation --count 500
-python dashboard.py
+python -m uvicorn dashboard:app --reload
 ```
 
 The dashboard is available at <http://127.0.0.1:8000>. `GET /health` checks
-readiness. `POST /api/validate` accepts the diagnosis fields plus optional
+readiness, `GET /` serves the dashboard page, and `POST /api/validate` accepts
+the diagnosis fields plus optional
 `interface_state` and `current_config` JSON values.
 
 To use the live Gemini path, install dependencies from `requirements.txt` and

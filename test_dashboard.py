@@ -4,6 +4,7 @@ from threading import Thread
 from http.server import HTTPServer
 
 from dashboard import DashboardHandler
+from dashboard import app
 
 
 def test_dashboard_health_and_validation_endpoint():
@@ -33,3 +34,7 @@ def test_dashboard_health_and_validation_endpoint():
     finally:
         server.shutdown()
         server.server_close()
+
+
+def test_dashboard_exposes_an_asgi_application():
+    assert callable(app)
